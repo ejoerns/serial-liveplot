@@ -119,8 +119,8 @@ void asdl_log(struct asdl_logger* logger, uint8_t nr, void *value);
 */
 
 #define CREATE_LOGGER(name, desc, channels, func) \
-  struct asdl_channel ch_##name[channels]; \
-  struct asdl_logger name = { channels, desc, ch_##name, func}
+  static struct asdl_channel ch_##name[channels]; \
+  static struct asdl_logger name = { channels, desc, ch_##name, func}
 
 /** @} */
 

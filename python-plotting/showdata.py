@@ -14,6 +14,7 @@ from collections import deque
 from matplotlib import pyplot as plt
 import struct
 import binascii
+import logging
 
 class ASDLChannel:
   ''' Holds information related to a data channel. '''
@@ -35,7 +36,13 @@ class ASDLChannel:
   data = ""
   decodeString = ""
 
+  INT8 = 0
+  INT16 = 1
+  INT32 = 2
+  INT64 = 3
+
   def __init__(self):
+    #logging.basicConfig(level=logging.DEBUG)
     pass
 
   def decodeType(self, inbyte):
@@ -45,21 +52,36 @@ class ASDLChannel:
     self.signedness = (inbyte & 0x08)
     # bits 0x07 encode base type
     data_t = (inbyte & 0x07)
-    if data_t == INT8:
+    if data_t == self.INT8:
       self.t_size = 1
-      c_type = 'c'
-    elif data_t == INT16:
+      if (self.signedness == 0):
+        c_type = 'b'
+      else:
+        c_type = 'B'
+    elif data_t == self.INT16:
       self.t_size = 2
-    elif data_t == INT32:
+      if (self.signedness == 0):
+        c_type = 'h'
+      else:
+        c_type = 'H'
+    elif data_t == self.INT32:
       self.t_size = 4
-    elif data_t == INT64:
+      if (self.signedness == 0):
+        c_type = 'i'
+      else:
+        c_type = 'I'
+    elif data_t == self.INT64:
       self.t_size = 8
+      if (self.signedness == 0):
+        c_type = 'l'
+      else:
+        c_type = 'L'
     else:
-      self.t_size = 0
+      raise
     self.data_size = self.vec_size * self.t_size
-    print "%d * %d = %d" % (self.vec_size, self.t_size, self.data_size)
-    for i in range (0, vec_size):
-      decodeString += 
+    for i in range (0, self.vec_size):
+      self.decodeString += c_type
+    logging.debug("decodeString: %s", self.decodeString)
 
 
   def pushDivisorByte(self, inbyte):
@@ -77,15 +99,22 @@ class ASDLChannel:
     self.data += chr(byte)
 
   def decodeDataStream(self):
-    print struct.unpack("I", part)
+    logging.debug("raw data: " + binascii.hexlify(self.data))
+    #logging.debug("decoded:  ", struct.unpack(self.decodeString, self.data))
+    retval = struct.unpack(self.decodeString, self.data)
+    self.data = ""
+    return retval
 
-# class that holds analog data for N samples
-class AnalogData:
+
+class ChannelData:
+  ''' 
+  Holds data for a single channel 
+  '''
   # constr
-  def __init__(self, maxLen):
-    self.ax = deque([0.0]*maxLen)
-    self.ay = deque([0.0]*maxLen)
+  def __init__(self, vec_size, maxLen):
+    self.vec_size = vec_size 
     self.maxLen = maxLen
+    self.data = [deque([0.0]*maxLen) for x in xrange(vec_size)]
 
   # ring buffer
   def addToBuf(self, buf, val):
@@ -97,24 +126,29 @@ class AnalogData:
 
   # add data
   def add(self, data):
-    assert(len(data) == 2)
-    self.addToBuf(self.ax, data[0])
-    self.addToBuf(self.ay, data[1])
-    
+    print "add: ", data
+    for idx in range(0, len(data)):
+      self.addToBuf(self.data[idx], data[idx])
+
+
 # plot class
 class AnalogPlot:
+  lines = []
   # constr
-  def __init__(self, analogData):
+  def __init__(self, plotData):
     # set plot to animated
-    plt.ion() 
-    self.axline, = plt.plot(analogData.ax)
-    self.ayline, = plt.plot(analogData.ay)
+    plt.ion()
+    for idx in xrange(len(plotData)):
+      self.lines.insert(idx, [])
+      for jdx in xrange(len(plotData[idx].data)):
+        self.lines[idx].insert(jdx, plt.plot(plotData[idx].data[jdx]))
     plt.ylim([0, 1023])
 
   # update plot
-  def update(self, analogData):
-    self.axline.set_ydata(analogData.ax)
-    self.ayline.set_ydata(analogData.ay)
+  def update(self, plotData):
+    for idx in xrange(len(plotData)):
+      for jdx in xrange(len(plotData[idx].data)):
+        self.lines[idx][jdx][0].set_ydata(plotData[idx].data[jdx])
     plt.draw()
 
 ASDL_IDENTIFIER = 0x55
@@ -124,10 +158,6 @@ ASDL_CMD_DATA = 0x00
 ASDL_CMD_ADD = 0x10
 ASDL_CMD_GO = 0x20
 
-INT8 = 0
-INT16 = 1
-INT32 = 2
-INT64 = 3
 
 data_channels = []
 
@@ -141,9 +171,6 @@ def main():
  #strPort = '/dev/tty.usbserial-A7006Yqh'
   strPort = sys.argv[1];
 
-  # plot parameters
-  analogData = AnalogData(100)
-  analogPlot = AnalogPlot(analogData)
 
   print 'plotting data...'
 
@@ -170,9 +197,16 @@ def main():
         command = (inbyte & 0xF0)
         channel = (inbyte & 0x0F)
         if command == ASDL_CMD_DATA:
+          if len(data_channels) == 0:
+            logging.error("No data channels set up, please resart device!")
+            parse_pos = 0
+            continue
           print "DATA command, channel %d" % channel
           # get channel bytes to read
-          stop_pos = data_channels[channel].data_size + 2
+          try:
+            stop_pos = data_channels[channel].data_size + 2
+          except:
+            logging.error("Error accessing channel, might not be set up correctly!")
           parse_pos += 1
         elif command == ASDL_CMD_ADD:
           print "ADD  command, channel %d" % channel
@@ -188,13 +222,19 @@ def main():
       else:
         # Received data
         if command == ASDL_CMD_DATA:
+          # check if all data received
           if parse_pos == stop_pos:
-            # -> evaluate data 
+            if inbyte == ASDL_END_TOKEN:
+              newData = data_channels[channel].decodeDataStream()
+              plotData[channel].add(newData)
+              analogPlot.update(plotData)
+            else:
+              logging.error("Expected end token, got 0x%02X", inbyte)
             print "--> evaluate"
-            data_channels[channel].decodeDataStream()
+            parse_pos = 0
           else:
             data_channels[channel].pushDataByte(inbyte)
-          parse_pos += 1
+            parse_pos += 1
 
         # Add channel
         elif command == ASDL_CMD_ADD:
@@ -252,6 +292,11 @@ def main():
           if inbyte == ASDL_END_TOKEN:
             # -> start capturing
             print "--> Start capturing..."
+            # plot parameters
+            plotData = []
+            for ch in data_channels:
+              plotData.append(ChannelData(ch.vec_size, 10))
+            analogPlot = AnalogPlot(plotData)
             pass
           else:
             print "Invalid GO command"

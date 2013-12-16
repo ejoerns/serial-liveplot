@@ -4,21 +4,24 @@
 void
 asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divisor, char* name, char* unit) {
   uint8_t t_size = 0;
-  switch(type) {
+  switch(type & 0x07) {
     case ASDL_INT8:
-      t_size = 8;
+      t_size = 1;
       break;
     case ASDL_INT16:
-      t_size = 16;
+      t_size = 2;
       break;
     case ASDL_INT32:
-      t_size = 32;
+      t_size = 4;
       break;
     case ASDL_INT64:
-      t_size = 64;
+      t_size = 8;
       break;
     case ASDL_FLOAT:
-      t_size = 32;
+      t_size = 4;
+      break;
+    default:
+      t_size = 0;
       break;
   }
   // size * vector size
@@ -61,7 +64,9 @@ asdl_log(struct asdl_logger* logger, uint8_t nr, void *value) {
   logger->send(ASDL_IDENTIFIER);
   logger->send(ASDL_CMD_DATA | nr);
   // send payload byte per byte
+  uint8_t val = 0;
   for (idx = 0; idx < logger->channels[nr].t_size; idx++) {
+    val = *(((char*) value) + idx);
     logger->send(*(((char*) value) + idx));
   }
   logger->send(ASDL_END_TOKEN);
