@@ -12,6 +12,72 @@ import numpy as np
 from time import sleep
 from collections import deque
 from matplotlib import pyplot as plt
+import struct
+import binascii
+
+class ASDLChannel:
+  ''' Holds information related to a data channel. '''
+  # total size of data payload
+  data_size = 0
+  # vector size
+  vec_size = 0
+  # 0 = signed, 1 = unsigned
+  signedness = 0
+  c_type = ""
+  t_size = 0
+  # data divisor to match 'unit'
+  divisor = 0
+  # string name of channel
+  name = ""
+  # string unit of channel
+  unit = ""
+  #
+  data = ""
+  decodeString = ""
+
+  def __init__(self):
+    pass
+
+  def decodeType(self, inbyte):
+    # upper 4 bits encode vector size - 1
+    self.vec_size = ((inbyte & 0xF0) >> 4) + 1
+    # bit 0x08 encodes signedness
+    self.signedness = (inbyte & 0x08)
+    # bits 0x07 encode base type
+    data_t = (inbyte & 0x07)
+    if data_t == INT8:
+      self.t_size = 1
+      c_type = 'c'
+    elif data_t == INT16:
+      self.t_size = 2
+    elif data_t == INT32:
+      self.t_size = 4
+    elif data_t == INT64:
+      self.t_size = 8
+    else:
+      self.t_size = 0
+    self.data_size = self.vec_size * self.t_size
+    print "%d * %d = %d" % (self.vec_size, self.t_size, self.data_size)
+    for i in range (0, vec_size):
+      decodeString += 
+
+
+  def pushDivisorByte(self, inbyte):
+    # TODO: throw exception when called too often?
+    self.divisor = self.divisor << 8
+    self.divisor = self.divisor | inbyte
+
+  def setName(self, name):
+    self.name = name
+
+  def setUnit(self, unit):
+    self.unit = unit
+
+  def pushDataByte(self, byte):
+    self.data += chr(byte)
+
+  def decodeDataStream(self):
+    print struct.unpack("I", part)
 
 # class that holds analog data for N samples
 class AnalogData:
@@ -63,6 +129,8 @@ INT16 = 1
 INT32 = 2
 INT64 = 3
 
+data_channels = []
+
 # main() function
 def main():
   # expects 1 arg - serial port string
@@ -80,7 +148,12 @@ def main():
   print 'plotting data...'
 
   # open serial port
-  ser = serial.Serial(strPort, 38400)
+  try:
+    ser = serial.Serial(strPort, 38400)
+  except:
+    print "Failed opening %s" % (strPort)
+    sys.exit(1)
+    
   parse_pos = 0
   stop_pos = 0
   name = ""
@@ -92,70 +165,60 @@ def main():
       if parse_pos == 0:
         if inbyte == ASDL_IDENTIFIER:
           parse_pos += 1
-          #print "ASDL_IDENTIFIER"
-      # expect cmd | channel number
+          #print "ASDL_IDENTIFIER" # expect cmd | channel number
       elif parse_pos == 1:
         command = (inbyte & 0xF0)
         channel = (inbyte & 0x0F)
         if command == ASDL_CMD_DATA:
           print "DATA command, channel %d" % channel
           # get channel bytes to read
-          # stop_pos = ...
+          stop_pos = data_channels[channel].data_size + 2
           parse_pos += 1
         elif command == ASDL_CMD_ADD:
           print "ADD  command, channel %d" % channel
+          newChannel = ASDLChannel()
           parse_pos += 1
         elif command == ASDL_CMD_GO:
           print "GO   command"
           parse_pos += 1
         else:
-          print "Unknown command %x " % (inbyte & 0xF0)
+          print "Unknown command %x" % (inbyte & 0xF0)
           parse_pos = 0
           # todo...
       else:
+        # Received data
         if command == ASDL_CMD_DATA:
           if parse_pos == stop_pos:
             # -> evaluate data 
-            pass
-          #
+            print "--> evaluate"
+            data_channels[channel].decodeDataStream()
+          else:
+            data_channels[channel].pushDataByte(inbyte)
+          parse_pos += 1
+
+        # Add channel
         elif command == ASDL_CMD_ADD:
           to_read = 0
           divisor = 0
           # read data type
           if parse_pos == 2:
-            # upper 4 bits encode vector size - 1
-            v_size = ((inbyte & 0xF0) >> 4) + 1
-            # bit 0x08 encodes signedness
-            signedness = (inbyte & 0x08)
-            # bits 0x07 encode base type
-            data_t = (inbyte & 0x07)
-            if data_t == INT8:
-              t_size = 8
-            elif data_t == INT16:
-              t_size = 16
-            elif data_t == INT32:
-              t_size = 32
-            elif data_t == INT64:
-              t_size = 64
-            else:
-              t_size = 0
-            to_read = v_size * t_size
-            print "%d * %d = %d" % (v_size, t_size, to_read)
+            newChannel.decodeType(inbyte)
             parse_pos += 1
           # read divisor
           elif parse_pos < 7:
-            divisor = divisor << 8
-            divisor = divisor | inbyte
-            parse_pos += 1
+            newChannel.pushDivisorByte(inbyte)
             counter = 0
+            parse_pos += 1
           # read strings
           else:
-            # check if done 
+
             if counter == 2:
               # command must be terminated with end token to be valid
               if inbyte == ASDL_END_TOKEN:
                 print "CMD DONE!"
                 # -> add channel
+                print "--> Add channel..."
+                data_channels.insert(channel, newChannel)
                 parse_pos = 0
                 continue
               # invalid command
@@ -163,19 +226,32 @@ def main():
                 print "ERROR!"
                 parse_pos = 0
                 continue
-            # end of string, switch to next
-            if chr(inbyte) == '\0':
+
+            # check for end of string
+            elif chr(inbyte) == '\0':
+              # end of string, switch to next
+              # check if done 
+              if counter == 0:
+                newChannel.setName(name)
+              elif counter == 1:
+                newChannel.setUnit(name)
               counter += 1
-              print name
               name = ""
+
             # concat characters to string
             else:
               name += chr(inbyte)
+              if (parse_pos > 1024):
+                print "Maximum command size exceeded. aborting"
+                parse_pos = 0
+                continue
+
             parse_pos += 1
-          #
+
         elif command == ASDL_CMD_GO:
           if inbyte == ASDL_END_TOKEN:
             # -> start capturing
+            print "--> Start capturing..."
             pass
           else:
             print "Invalid GO command"
