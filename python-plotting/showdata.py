@@ -126,7 +126,7 @@ class ChannelData:
 
   # add data
   def add(self, data):
-    print "add: ", data
+    #print "add: ", data
     for idx in range(0, len(data)):
       self.addToBuf(self.data[idx], data[idx])
 
@@ -142,7 +142,7 @@ class AnalogPlot:
       self.lines.insert(idx, [])
       for jdx in xrange(len(plotData[idx].data)):
         self.lines[idx].insert(jdx, plt.plot(plotData[idx].data[jdx]))
-    plt.ylim([0, 1023])
+    plt.ylim([-2000, 2023])
 
   # update plot
   def update(self, plotData):
@@ -160,6 +160,140 @@ ASDL_CMD_GO = 0x20
 
 
 data_channels = []
+
+class SerialHandler:
+
+  parse_pos = 0
+  stop_pos = 0
+  name = ""
+  counter = 0
+  command = 0
+  channel = 0
+  currentChannel = 0
+  plotData = []
+  analogPlot = None
+
+  def __init__(self):
+    self.parse_pos = 0
+    self.stop_pos = 0
+    self.counter = 0
+    self.command = 0
+    self.channel = 0
+    currentChannel = 0
+
+  def handle(self, inbyte):
+    # expect identifier
+    if self.parse_pos == 0:
+      if inbyte == ASDL_IDENTIFIER:
+        self.parse_pos += 1
+        #print "ASDL_IDENTIFIER" # expect cmd | channel number
+    elif self.parse_pos == 1:
+      self.command = (inbyte & 0xF0)
+      self.channel = (inbyte & 0x0F)
+      if self.command == ASDL_CMD_DATA:
+        if len(data_channels) == 0:
+          logging.error("No data channels set up, please resart device!")
+          self.parse_pos = 0
+          return
+        #print "DATA self.command, channel %d" % channel
+        # get channel bytes to read
+        try:
+          self.stop_pos = data_channels[self.channel].data_size + 2
+        except:
+          logging.error("Error accessing channel, might not be set up correctly!")
+        self.parse_pos += 1
+      elif self.command == ASDL_CMD_ADD:
+        print "ADD  self.command, channel %d" % self.channel
+        self.currentChannel = ASDLChannel()
+        self.parse_pos += 1
+      elif self.command == ASDL_CMD_GO:
+        print "GO   self.command"
+        self.parse_pos += 1
+      else:
+        print "Unknown self.command %x" % (inbyte & 0xF0)
+        self.parse_pos = 0
+        # todo...
+    else:
+      # Received data
+      if self.command == ASDL_CMD_DATA:
+        # check if all data received
+        if self.parse_pos == self.stop_pos:
+          if inbyte == ASDL_END_TOKEN:
+            newData = data_channels[self.channel].decodeDataStream()
+            self.plotData[self.channel].add(newData)
+            self.analogPlot.update(self.plotData)
+          else:
+            logging.error("Expected end token, got 0x%02X", inbyte)
+          self.parse_pos = 0
+        else:
+          data_channels[self.channel].pushDataByte(inbyte)
+          self.parse_pos += 1
+
+      # Add channel
+      elif self.command == ASDL_CMD_ADD:
+        to_read = 0
+        divisor = 0
+        # read data type
+        if self.parse_pos == 2:
+          self.currentChannel.decodeType(inbyte)
+          self.parse_pos += 1
+        # read divisor
+        elif self.parse_pos < 7:
+          self.currentChannel.pushDivisorByte(inbyte)
+          self.counter = 0
+          self.parse_pos += 1
+        # read strings
+        else:
+
+          if self.counter == 2:
+            # self.command must be terminated with end token to be valid
+            if inbyte == ASDL_END_TOKEN:
+              print "CMD DONE!"
+              # -> add channel
+              print "--> Add channel..."
+              data_channels.insert(self.channel, self.currentChannel)
+              self.parse_pos = 0
+              return
+            # invalid self.command
+            else:
+              print "ERROR!"
+              self.parse_pos = 0
+              return
+
+          # check for end of string
+          elif chr(inbyte) == '\0':
+            # end of string, switch to next
+            # check if done 
+            if self.counter == 0:
+              self.currentChannel.setName(self.name)
+            elif self.counter == 1:
+              self.currentChannel.setUnit(self.name)
+            self.counter += 1
+            self.name = ""
+
+          # concat characters to string
+          else:
+            self.name += chr(inbyte)
+            if (self.parse_pos > 1024):
+              print "Maximum self.command size exceeded. aborting"
+              self.parse_pos = 0
+              return
+
+          self.parse_pos += 1
+
+      elif self.command == ASDL_CMD_GO:
+        if inbyte == ASDL_END_TOKEN:
+          # -> start capturing
+          print "--> Start capturing..."
+          # plot parameters
+          self.plotData = []
+          for ch in data_channels:
+            self.plotData.append(ChannelData(ch.vec_size, 100))
+          self.analogPlot = AnalogPlot(self.plotData)
+          pass
+        else:
+          print "Invalid GO self.command"
+        self.parse_pos = 0
 
 # main() function
 def main():
@@ -181,127 +315,11 @@ def main():
     print "Failed opening %s" % (strPort)
     sys.exit(1)
     
-  parse_pos = 0
-  stop_pos = 0
-  name = ""
-  counter = 0
+  handler = SerialHandler()
   while True:
     try:
       inbyte = ord(ser.read())
-      # expect identifier
-      if parse_pos == 0:
-        if inbyte == ASDL_IDENTIFIER:
-          parse_pos += 1
-          #print "ASDL_IDENTIFIER" # expect cmd | channel number
-      elif parse_pos == 1:
-        command = (inbyte & 0xF0)
-        channel = (inbyte & 0x0F)
-        if command == ASDL_CMD_DATA:
-          if len(data_channels) == 0:
-            logging.error("No data channels set up, please resart device!")
-            parse_pos = 0
-            continue
-          print "DATA command, channel %d" % channel
-          # get channel bytes to read
-          try:
-            stop_pos = data_channels[channel].data_size + 2
-          except:
-            logging.error("Error accessing channel, might not be set up correctly!")
-          parse_pos += 1
-        elif command == ASDL_CMD_ADD:
-          print "ADD  command, channel %d" % channel
-          newChannel = ASDLChannel()
-          parse_pos += 1
-        elif command == ASDL_CMD_GO:
-          print "GO   command"
-          parse_pos += 1
-        else:
-          print "Unknown command %x" % (inbyte & 0xF0)
-          parse_pos = 0
-          # todo...
-      else:
-        # Received data
-        if command == ASDL_CMD_DATA:
-          # check if all data received
-          if parse_pos == stop_pos:
-            if inbyte == ASDL_END_TOKEN:
-              newData = data_channels[channel].decodeDataStream()
-              plotData[channel].add(newData)
-              analogPlot.update(plotData)
-            else:
-              logging.error("Expected end token, got 0x%02X", inbyte)
-            print "--> evaluate"
-            parse_pos = 0
-          else:
-            data_channels[channel].pushDataByte(inbyte)
-            parse_pos += 1
-
-        # Add channel
-        elif command == ASDL_CMD_ADD:
-          to_read = 0
-          divisor = 0
-          # read data type
-          if parse_pos == 2:
-            newChannel.decodeType(inbyte)
-            parse_pos += 1
-          # read divisor
-          elif parse_pos < 7:
-            newChannel.pushDivisorByte(inbyte)
-            counter = 0
-            parse_pos += 1
-          # read strings
-          else:
-
-            if counter == 2:
-              # command must be terminated with end token to be valid
-              if inbyte == ASDL_END_TOKEN:
-                print "CMD DONE!"
-                # -> add channel
-                print "--> Add channel..."
-                data_channels.insert(channel, newChannel)
-                parse_pos = 0
-                continue
-              # invalid command
-              else:
-                print "ERROR!"
-                parse_pos = 0
-                continue
-
-            # check for end of string
-            elif chr(inbyte) == '\0':
-              # end of string, switch to next
-              # check if done 
-              if counter == 0:
-                newChannel.setName(name)
-              elif counter == 1:
-                newChannel.setUnit(name)
-              counter += 1
-              name = ""
-
-            # concat characters to string
-            else:
-              name += chr(inbyte)
-              if (parse_pos > 1024):
-                print "Maximum command size exceeded. aborting"
-                parse_pos = 0
-                continue
-
-            parse_pos += 1
-
-        elif command == ASDL_CMD_GO:
-          if inbyte == ASDL_END_TOKEN:
-            # -> start capturing
-            print "--> Start capturing..."
-            # plot parameters
-            plotData = []
-            for ch in data_channels:
-              plotData.append(ChannelData(ch.vec_size, 10))
-            analogPlot = AnalogPlot(plotData)
-            pass
-          else:
-            print "Invalid GO command"
-          parse_pos = 0
-
+      handler.handle(inbyte)
     except KeyboardInterrupt:
       print 'exiting'
       break
