@@ -111,9 +111,12 @@ class ChannelData:
   Holds data for a single channel 
   '''
   # constr
-  def __init__(self, vec_size, maxLen):
+  def __init__(self, vec_size, maxLen, label="Unknown", unit="[]", divisor=1):
     self.vec_size = vec_size 
     self.maxLen = maxLen
+    self.plotUnit = unit
+    self.plotLabel = label
+    self.divisor = divisor
     self.data = [deque([0.0]*maxLen) for x in xrange(vec_size)]
 
   # ring buffer
@@ -128,28 +131,41 @@ class ChannelData:
   def add(self, data):
     #print "add: ", data
     for idx in range(0, len(data)):
-      self.addToBuf(self.data[idx], data[idx])
+      self.addToBuf(self.data[idx], data[idx] / self.divisor)
 
 
 # plot class
 class AnalogPlot:
   lines = []
+  idx = 0
   # constr
   def __init__(self, plotData):
     # set plot to animated
     plt.ion()
     for idx in xrange(len(plotData)):
       self.lines.insert(idx, [])
+      spl = plt.subplot(len(plotData), 1, idx+1)
+      plt.title(plotData[idx].plotLabel)
+      plt.xlabel('samples')
+      plt.ylabel(plotData[idx].plotUnit)
+      plt.ylim([-2000, 2023])
       for jdx in xrange(len(plotData[idx].data)):
-        self.lines[idx].insert(jdx, plt.plot(plotData[idx].data[jdx]))
-    plt.ylim([-2000, 2023])
+        self.lines[idx].insert(jdx, plt.plot(plotData[idx].data[jdx], label='%d'%jdx))
+      # place legend right of subplot by decreasing plot width to 90%
+      box = spl.get_position()
+      spl.set_position([box.x0, box.y0, box.width * 0.9, box.height])
+      plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
 
   # update plot
   def update(self, plotData):
+    self.idx += 1
     for idx in xrange(len(plotData)):
       for jdx in xrange(len(plotData[idx].data)):
         self.lines[idx][jdx][0].set_ydata(plotData[idx].data[jdx])
-    plt.draw()
+    if (self.idx % 10) == 0:
+      plt.draw()
+      self.idx = 0
 
 ASDL_IDENTIFIER = 0x55
 ASDL_END_TOKEN = 0x69
@@ -288,7 +304,7 @@ class SerialHandler:
           # plot parameters
           self.plotData = []
           for ch in data_channels:
-            self.plotData.append(ChannelData(ch.vec_size, 100))
+            self.plotData.append(ChannelData(ch.vec_size, 100, ch.name, ch.unit, ch.divisor))
           self.analogPlot = AnalogPlot(self.plotData)
           pass
         else:
@@ -297,6 +313,7 @@ class SerialHandler:
 
 # main() function
 def main():
+
   # expects 1 arg - serial port string
   if(len(sys.argv) != 2):
     print 'Example usage: python showdata.py "/dev/tty.usbmodem411"'
@@ -305,8 +322,7 @@ def main():
  #strPort = '/dev/tty.usbserial-A7006Yqh'
   strPort = sys.argv[1];
 
-
-  print 'plotting data...'
+  print 'Starting logger...'
 
   # open serial port
   try:
