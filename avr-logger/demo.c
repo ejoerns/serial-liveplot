@@ -45,9 +45,9 @@ PROCESS_THREAD(hello_world_process, ev, data)
   CREATE_LOGGER(my_logger, "My Logger", 4, &my_send);
   //struct asdl_channel my_logger_channels[4];
   //struct asdl_logger my_logger = { 4, "My Logger", &my_logger_channels};
-  asdl_add_ch(&my_logger, 0, ASDL_VEC3 | ASDL_SIGNED | ASDL_INT32, 1, "Acc  [x:y:z]", "mg");
-  asdl_add_ch(&my_logger, 1, ASDL_VEC2 | ASDL_SIGNED | ASDL_INT32, 1, "Gyro [x:y]", "mdps");
-  asdl_add_ch(&my_logger, 2, ASDL_VEC1 | ASDL_SIGNED | ASDL_INT16, 1, "Temp",  "C");
+  asdl_add_ch(&my_logger, 0, ASDL_VEC3 | ASDL_SIGNED | ASDL_INT32, 1, -2000, 2000, "Acc  [x:y:z]", "mg");
+  asdl_add_ch(&my_logger, 1, ASDL_VEC2 | ASDL_SIGNED | ASDL_INT32, 1, -500, 500, "Gyro [x:y]", "mdps");
+  asdl_add_ch(&my_logger, 2, ASDL_VEC1 | ASDL_SIGNED | ASDL_INT16, 1, -55, 185, "Temp",  "C");
 
   asdl_start_logger(&my_logger);
 
