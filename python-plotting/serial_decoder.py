@@ -12,79 +12,109 @@ ASDL_CMD_DATA = 0x00
 ASDL_CMD_ADD = 0x10
 ASDL_CMD_GO = 0x20
 
+import serial
+import threading
+import time
 
-class ASDLChannel:
-  ''' Holds information related to a data channel. '''
-  # total size of data payload
-  data_size = 0
-  # vector size
-  vec_size = 0
-  # 0 = signed, 1 = unsigned
-  signedness = 0
-  c_type = ""
-  t_size = 0
-  # data divisor to match 'unit'
-  divisor = 0
-  # string name of channel
-  name = ""
-  # string unit of channel
-  unit = ""
-  #
-  data = ""
-  decodeString = ""
+class SerialReceiver(threading.Thread):
+    """ This class has been written by
+        Philipp Klaus and can be found on
+        https://gist.github.com/4039175 .  """
+    def __init__(self, device, port, *args):
+        self._target = self.read
+        self._args = args
+        self.__lock = threading.Lock()
+        self.ser = serial.Serial(device, port)
+        self.data_buffer = ""
+        self.closing = False # A flag to indicate thread shutdown
+        self.sleeptime = 0.00005
+        threading.Thread.__init__(self)
+        self.handler = []
 
-  INT8 = 0
-  INT16 = 1
-  INT32 = 2
-  INT64 = 3
+    def run(self):
+        self._target(*self._args)
+
+    def read(self):
+        while not self.closing:
+            time.sleep(self.sleeptime)
+            if not self.__lock.acquire(False):
+                continue
+            try:
+                inbyte = ord(self.ser.read(1))
+                for h in self.handler:
+                  h.handle(inbyte)
+            finally:
+                self.__lock.release()
+        self.ser.close()
+
+    def pop_buffer(self):
+        # If a request is pending, we don't access the buffer
+        if not self.__lock.acquire(False):
+            return ""
+        buf = self.data_buffer
+        self.data_buffer = ""
+        self.__lock.release()
+        return buf
+
+    def write(data):
+        self.ser.write(data)
+
+    def close(self):
+        self.closing = True
+
+class ASDLChannelDecoder:
+  '''
+  Extracts channel information from data provided by an 'add' command.
+  Then allows to decode data sent for this channel
+  '''
+
+  # decoding from signedness | type to struct modules names
+  dec_types = {
+    (0 << 3) | 0x0 : ['b', 1], # int8
+    (0 << 3) | 0x1 : ['h', 2], # int16
+    (0 << 3) | 0x2 : ['i', 4], # int32
+    (0 << 3) | 0x3 : ['l', 8], # int64
+    (1 << 3) | 0x0 : ['B', 1], # uint8
+    (1 << 3) | 0x1 : ['H', 2], # uint16
+    (1 << 3) | 0x2 : ['I', 4], # uint32
+    (1 << 3) | 0x3 : ['L', 8]  # uint64
+  }
 
   def __init__(self):
+    # total size of data payload
+    self.data_size = 0
+    # vector size
+    self.vec_size = 0
+    # data divisor to match 'unit'
+    self.__divisor = 0
+    # string name of channel
+    self.name = ""
+    # string unit of channel
+    self.unit = ""
+    #
+    self.data = ""
+    self._decodeString = ""
+    # DEBUG: set logging level
     #logging.basicConfig(level=logging.DEBUG)
-    pass
 
   def decodeType(self, inbyte):
     # upper 4 bits encode vector size - 1
     self.vec_size = ((inbyte & 0xF0) >> 4) + 1
-    # bit 0x08 encodes signedness
-    self.signedness = (inbyte & 0x08)
-    # bits 0x07 encode base type
-    data_t = (inbyte & 0x07)
-    if data_t == self.INT8:
-      self.t_size = 1
-      if (self.signedness == 0):
-        c_type = 'b'
-      else:
-        c_type = 'B'
-    elif data_t == self.INT16:
-      self.t_size = 2
-      if (self.signedness == 0):
-        c_type = 'h'
-      else:
-        c_type = 'H'
-    elif data_t == self.INT32:
-      self.t_size = 4
-      if (self.signedness == 0):
-        c_type = 'i'
-      else:
-        c_type = 'I'
-    elif data_t == self.INT64:
-      self.t_size = 8
-      if (self.signedness == 0):
-        c_type = 'l'
-      else:
-        c_type = 'L'
-    else:
-      raise
-    self.data_size = self.vec_size * self.t_size
-    for i in range (0, self.vec_size):
-      self.decodeString += c_type
-    logging.debug("decodeString: %s", self.decodeString)
+    # bit 0x08 encodes signedness, bits 0x07 encode base type
+    try:
+      c_type, t_size = self.dec_types[inbyte & 0x0F]
+    except KeyError:
+      raise Exception("Invalid data type")
 
+    self.data_size = self.vec_size * t_size
+    # concat full decode string
+    self._decodeString = c_type * self.vec_size
+    logging.debug("decodeString: %s", self._decodeString)
 
   def pushDivisorByte(self, inbyte):
     # TODO: throw exception when called too often?
-    self.divisor = self.divisor << 8
-    self.divisor = self.divisor | inbyte
+    self.__divisor = self.__divisor << 8
+    self.__divisor = self.__divisor | inbyte
 
   def setName(self, name):
     self.name = name
@@ -92,150 +122,167 @@ class ASDLChannel:
   def setUnit(self, unit):
     self.unit = unit
 
+  def getPlotDataInstance(self):
+    return ChannelPlotData(self.vec_size, 100, label=self.name, unit=self.unit, divisor=self.__divisor)
+
+
   def pushDataByte(self, byte):
     self.data += chr(byte)
 
   def decodeDataStream(self):
     logging.debug("raw data: " + binascii.hexlify(self.data))
-    #logging.debug("decoded:  ", struct.unpack(self.decodeString, self.data))
-    retval = struct.unpack(self.decodeString, self.data)
+    retval = struct.unpack(self._decodeString, self.data)
+    #print "decoded: ", retval
     self.data = ""
     return retval
 
 
-data_channels = []
+class ASDLDecoder:
+  '''
+  Used to decode input data
 
-class SerialHandler:
+  To react on new decodes, register handler functions
+  '''
 
-  parse_pos = 0
-  stop_pos = 0
-  name = ""
-  counter = 0
-  command = 0
-  channel = 0
-  currentChannel = 0
-  plotData = []
-  analogPlot = None
-
-  def __init__(self):
-    self.parse_pos = 0
+  def __init__(self, ch_data, my_queue):
+    self.my_queue = my_queue
+    print (self.my_queue)
+    self.__parse_pos = 0
     self.stop_pos = 0
+    self.name = ""
     self.counter = 0
-    self.command = 0
-    self.channel = 0
-    currentChannel = 0
+    # hold channel and command for current received bytes
+    self.curr_command = 0
+    self.curr_channel = 0
+    curr_ch_decoder = 0
+    self.plotData = ch_data
+    self.analogPlot = None
+    self.channel_decoders = [] # Holds decoder class for each channel
+    # Handler functions
+    self.onChannelAddHandler = []
+    self.onStartHandler = []
+    self.onDataUpdateHandler = []
+
+    #logging.basicConfig(level=logging.DEBUG)
 
   def handle(self, inbyte):
-    # expect identifier
-    if self.parse_pos == 0:
+    # First byte: expect identifier
+    if self.__parse_pos == 0:
       if inbyte == ASDL_IDENTIFIER:
-        self.parse_pos += 1
-        #print "ASDL_IDENTIFIER" # expect cmd | channel number
-    elif self.parse_pos == 1:
-      self.command = (inbyte & 0xF0)
-      self.channel = (inbyte & 0x0F)
-      if self.command == ASDL_CMD_DATA:
-        if len(data_channels) == 0:
+        self.__parse_pos += 1
+
+    # Second byte: expect command | channel
+    elif self.__parse_pos == 1:
+      self.curr_command = (inbyte & 0xF0)
+      self.curr_channel = (inbyte & 0x0F)
+
+      if self.curr_command == ASDL_CMD_DATA:
+        logging.info("got DATA command for channel %d" % self.curr_channel)
+        if len(self.channel_decoders) == 0:
           logging.error("No data channels set up, please resart device!")
-          self.parse_pos = 0
-          return
-        #print "DATA self.command, channel %d" % channel
-        # get channel bytes to read
+          self.__parse_pos = 0
+          return 1
+        # get channel bytes to read (data_size + 2 bytes)
         try:
-          self.stop_pos = data_channels[self.channel].data_size + 2
+          self.stop_pos = self.channel_decoders[self.curr_channel].data_size + 2
+          self.__parse_pos += 1
         except:
-          logging.error("Error accessing channel, might not be set up correctly!")
-        self.parse_pos += 1
-      elif self.command == ASDL_CMD_ADD:
-        print "ADD  self.command, channel %d" % self.channel
-        self.currentChannel = ASDLChannel()
-        self.parse_pos += 1
-      elif self.command == ASDL_CMD_GO:
-        print "GO   self.command"
-        self.parse_pos += 1
+          logging.error("Error accessing channel %d, might not be set up correctly!" % self.curr_channel)
+          raise
+
+      elif self.curr_command == ASDL_CMD_ADD:
+        logging.info("got ADD  command for channel %d" % self.curr_channel)
+        self.curr_ch_decoder = ASDLChannelDecoder()
+        self.__parse_pos += 1
+
+      elif self.curr_command == ASDL_CMD_GO:
+        logging.info("got GO   command")
+        self.__parse_pos += 1
+
       else:
-        print "Unknown self.command %x" % (inbyte & 0xF0)
-        self.parse_pos = 0
-        # todo...
+        logging.error("got Unknown command 0x%02x" % (inbyte & 0xF0))
+        self.__parse_pos = 0
+
+    # Other bytes: handle based on command
     else:
       # Received data
-      if self.command == ASDL_CMD_DATA:
+      if self.curr_command == ASDL_CMD_DATA:
         # check if all data received
-        if self.parse_pos == self.stop_pos:
+        if self.__parse_pos == self.stop_pos:
           if inbyte == ASDL_END_TOKEN:
-            newData = data_channels[self.channel].decodeDataStream()
-            self.plotData[self.channel].add(newData)
-            self.analogPlot.update(self.plotData)
+            # add new data to channels queue
+            newData = self.channel_decoders[self.curr_channel].decodeDataStream()
+            self.plotData[self.curr_channel].add(newData)
+            #print "Adding new_data to queue ", self.my_queue
+            self.my_queue.put("<new_data>")
           else:
             logging.error("Expected end token, got 0x%02X", inbyte)
-          self.parse_pos = 0
+          self.__parse_pos = 0
+        # new data byte
         else:
-          data_channels[self.channel].pushDataByte(inbyte)
-          self.parse_pos += 1
+          self.channel_decoders[self.curr_channel].pushDataByte(inbyte)
+          self.__parse_pos += 1
 
       # Add channel
-      elif self.command == ASDL_CMD_ADD:
-        to_read = 0
-        divisor = 0
+      elif self.curr_command == ASDL_CMD_ADD:
         # read data type
-        if self.parse_pos == 2:
-          self.currentChannel.decodeType(inbyte)
-          self.parse_pos += 1
+        if self.__parse_pos == 2:
+          self.curr_ch_decoder.decodeType(inbyte)
+          self.__parse_pos += 1
         # read divisor
-        elif self.parse_pos < 7:
-          self.currentChannel.pushDivisorByte(inbyte)
+        elif self.__parse_pos < 7:
+          self.curr_ch_decoder.pushDivisorByte(inbyte)
           self.counter = 0
-          self.parse_pos += 1
+          self.__parse_pos += 1
         # read strings
         else:
-
           if self.counter == 2:
-            # self.command must be terminated with end token to be valid
+            # command must be terminated with end token to be valid
             if inbyte == ASDL_END_TOKEN:
-              print "CMD DONE!"
               # -> add channel
-              print "--> Add channel..."
-              data_channels.insert(self.channel, self.currentChannel)
-              self.parse_pos = 0
+              logging.info("Adding channel, %d" % self.curr_channel)
+              self.channel_decoders.insert(self.curr_channel, self.curr_ch_decoder)
+              self.__parse_pos = 0
               return
-            # invalid self.command
+            # invalid command
             else:
-              print "ERROR!"
-              self.parse_pos = 0
+              logging.error("Expected ASDL_END_TOKEN, got 0x%02X" % (inbyte))
+              self.__parse_pos = 0
               return
-
           # check for end of string
           elif chr(inbyte) == '\0':
             # end of string, switch to next
             # check if done 
             if self.counter == 0:
-              self.currentChannel.setName(self.name)
+              self.curr_ch_decoder.setName(self.name)
             elif self.counter == 1:
-              self.currentChannel.setUnit(self.name)
+              self.curr_ch_decoder.setUnit(self.name)
             self.counter += 1
             self.name = ""
-
           # concat characters to string
           else:
             self.name += chr(inbyte)
-            if (self.parse_pos > 1024):
-              print "Maximum self.command size exceeded. aborting"
-              self.parse_pos = 0
+            if (self.__parse_pos > 1024):
+              print "Maximum command size exceeded. aborting"
+              self.__parse_pos = 0
               return
-
-          self.parse_pos += 1
-
-      elif self.command == ASDL_CMD_GO:
+          self.__parse_pos += 1
+      
+      # Start data capturing
+      elif self.curr_command == ASDL_CMD_GO:
         if inbyte == ASDL_END_TOKEN:
-          # -> start capturing
-          print "--> Start capturing..."
-          # plot parameters
-          self.plotData = []
-          for ch in data_channels:
-            self.plotData.append(ChannelData(ch.vec_size, 100, ch.name, ch.unit, ch.divisor))
-          self.analogPlot = AnalogPlot(self.plotData)
-          pass
+          logging.info("Start capturing...")
+          # get instance from each decoder 
+          del self.plotData[:]
+          for ch in self.channel_decoders:
+            print self.curr_ch_decoder.getPlotDataInstance()
+            self.plotData.append(ch.getPlotDataInstance())
+          # Call onStartHandlers
+          print "------------------>"
+          print id(self.plotData)
+          for sh in self.onStartHandler:
+            sh(self.plotData)
         else:
-          print "Invalid GO self.command"
-        self.parse_pos = 0
+          logging.error("Invalid go command")
+        self.__parse_pos = 0
 

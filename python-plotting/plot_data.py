@@ -1,17 +1,20 @@
 from collections import deque
 
-class ChannelData:
+class ChannelPlotData:
   ''' 
   Holds data for a single channel 
   '''
   # constr
-  def __init__(self, vec_size, maxLen, label="Unknown", unit="[]", divisor=1):
-    self.vec_size = vec_size 
+  def __init__(self, vec_size, maxLen, label="Unknown", unit="[]", divisor=1, data_range=(-2000, 2000)):
     self.maxLen = maxLen
     self.plotUnit = unit
     self.plotLabel = label
     self.divisor = divisor
+    self.data_range = data_range
+    # 
+    self.vec_size = vec_size # really required?
     self.data = [deque([0.0]*maxLen) for x in xrange(vec_size)]
+    print "init with vec_size %d" % (vec_size)
 
   # ring buffer
   def addToBuf(self, buf, val):

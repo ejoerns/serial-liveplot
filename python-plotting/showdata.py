@@ -24,30 +24,39 @@ def main():
   if(len(sys.argv) != 2):
     print 'Example usage: python showdata.py "/dev/tty.usbmodem411"'
     exit(1)
-
- #strPort = '/dev/tty.usbserial-A7006Yqh'
+  
+  # Expect port as first argument
   strPort = sys.argv[1];
 
   print 'Starting logger...'
 
-  # open serial port
-  try:
-    ser = serial.Serial(strPort, 38400)
-  except:
-    print "Failed opening %s" % (strPort)
-    sys.exit(1)
-    
-  handler = SerialHandler()
+  # to add channels to...
+  ch_data = []
+  ser_recv = SerialReceiver(strPort, 38400)
+  my_queue = mp.Queue()
+  ser_dec = ASDLDecoder(ch_data, my_queue)
+  
+  # register handler
+  ser_recv.handler.append(ser_dec)
+
+  #plotter.setup()
+  #ser_dec.onStartHandler.append(plotter.setup)
+  #ser_dec.registerHandler(plotter)
+
+  plotter = ASDLPlotter(ch_data, my_queue)
+  ser_dec.onStartHandler.append(plotter.setup)
+
+  # Start receiver worker Thread
+  ser_recv.start()
+
+  # Start gui on main Thread
+  plotter.show()
+
   while True:
-    try:
-      inbyte = ord(ser.read())
-      handler.handle(inbyte)
-    except KeyboardInterrupt:
-      print 'exiting'
-      break
-  # close serial
-  ser.flush()
-  ser.close()
+    pass
+
+  ser_recv.close()
+  print "Done!"
 
 # call main
 if __name__ == '__main__':
