@@ -18,15 +18,17 @@ import time
 
 # plot class
 class ASDLPlotter(animation.TimedAnimation):
-
+  ''' 
+  Plots data provided by a list of ChannelPlotData.
+  '''
 
   # constr
-  def __init__(self, plotData, my_queue):
+  def __init__(self, plotData):
     ''' 
     plotData: is expected to be a list of ChannelPlotData
     '''
     self.plotData = plotData
-    self.my_queue = my_queue
+    self.my_queue = mp.Queue()
     self.fig = plt.figure()
     self.win = self.fig.canvas.manager.window
     self.lines = []

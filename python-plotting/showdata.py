@@ -16,34 +16,36 @@ from serial_decoder import *
 from plot_data import *
 from plotgui import *
 
+import argparse
+
 
 # main() function
 def main():
 
-  # expects 1 arg - serial port string
-  if(len(sys.argv) != 2):
-    print 'Example usage: python showdata.py "/dev/tty.usbmodem411"'
-    exit(1)
+  parser = argparse.ArgumentParser(description="AVR serial data logger")
   
-  # Expect port as first argument
-  strPort = sys.argv[1];
+  parser.add_argument('port', default='/dev/ttyUSB0',
+      help='Serial port the device is connected to. Default: /dev/ttyUSB0')
+  parser.add_argument('-b, --braudrate', dest='baudrate', type=int, default=38400,
+      help='Baudrate of device. Default: 38400')
+  parser.add_argument('-s, --samples', dest='samples', type=int, default=100,
+      help='Number of displayed samples. Default: 100')
+  
+  args = parser.parse_args()
+
+  print(args)
 
   print 'Starting logger...'
 
-  # to add channels to...
+  # shared plot data list
   ch_data = []
-  ser_recv = SerialReceiver(strPort, 38400)
-  my_queue = mp.Queue()
-  ser_dec = ASDLDecoder(ch_data, my_queue)
+  ser_recv = SerialReceiver(args.port, args.baudrate)
+  ser_dec = ASDLDecoder(ch_data, samples=args.samples)
   
   # register handler
   ser_recv.handler.append(ser_dec)
 
-  #plotter.setup()
-  #ser_dec.onStartHandler.append(plotter.setup)
-  #ser_dec.registerHandler(plotter)
-
-  plotter = ASDLPlotter(ch_data, my_queue)
+  plotter = ASDLPlotter(ch_data)
   ser_dec.onStartHandler.append(plotter.setup)
 
   # Start receiver worker Thread

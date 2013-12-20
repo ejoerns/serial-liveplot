@@ -130,12 +130,12 @@ class ASDLChannelDecoder:
   def setUnit(self, unit):
     self.unit = unit
 
-  def getPlotDataInstance(self):
+  def getPlotDataInstance(self, samples):
     range_l, = struct.unpack('>l', self.__range_l)
     range_h, = struct.unpack('>l', self.__range_h)
     return ChannelPlotData(
         self.vec_size, 
-        1000, 
+        samples, 
         label=self.name, 
         unit=self.unit, 
         divisor=self.__divisor, 
@@ -160,9 +160,8 @@ class ASDLDecoder:
   To react on new decodes, register handler functions
   '''
 
-  def __init__(self, ch_data, my_queue):
-    self.my_queue = my_queue
-    print (self.my_queue)
+  def __init__(self, ch_data, samples=100):
+    self.samples = samples
     self.__parse_pos = 0
     self.stop_pos = 0
     self.name = ""
@@ -229,8 +228,7 @@ class ASDLDecoder:
             # add new data to channels queue
             newData = self.channel_decoders[self.curr_channel].decodeDataStream()
             self.plotData[self.curr_channel].add(newData)
-            #print "Adding new_data to queue ", self.my_queue
-            self.my_queue.put("<new_data>")
+            # TODO: call plotter?
           else:
             logging.error("Expected end token, got 0x%02X", inbyte)
           self.__parse_pos = 0
@@ -300,7 +298,7 @@ class ASDLDecoder:
           # get instance from each decoder 
           del self.plotData[:]
           for ch in self.channel_decoders:
-            self.plotData.append(ch.getPlotDataInstance())
+            self.plotData.append(ch.getPlotDataInstance(self.samples))
           # Call onStartHandlers
           for sh in self.onStartHandler:
             sh(self.plotData)
