@@ -135,7 +135,7 @@ class ASDLChannelDecoder:
     range_h, = struct.unpack('>l', self.__range_h)
     return ChannelPlotData(
         self.vec_size, 
-        100, 
+        1000, 
         label=self.name, 
         unit=self.unit, 
         divisor=self.__divisor, 
@@ -300,11 +300,8 @@ class ASDLDecoder:
           # get instance from each decoder 
           del self.plotData[:]
           for ch in self.channel_decoders:
-            print self.curr_ch_decoder.getPlotDataInstance()
             self.plotData.append(ch.getPlotDataInstance())
           # Call onStartHandlers
-          print "------------------>"
-          print id(self.plotData)
           for sh in self.onStartHandler:
             sh(self.plotData)
         else:

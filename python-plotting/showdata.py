@@ -52,9 +52,6 @@ def main():
   # Start gui on main Thread
   plotter.show()
 
-  while True:
-    pass
-
   ser_recv.close()
   print "Done!"
 

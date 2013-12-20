@@ -35,5 +35,5 @@ class ChannelPlotData:
   def add(self, data):
     #print "add: ", data
     for idx in range(0, len(data)):
-      self.addToBuf(self.data[idx], data[idx] / self.divisor)
+      self.addToBuf(self.data[idx], (0.0 + data[idx]) / self.divisor)
 
