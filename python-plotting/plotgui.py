@@ -1,3 +1,5 @@
+import logging
+
 import gtk, gobject
 
 import matplotlib
@@ -42,7 +44,7 @@ class ASDLPlotter(animation.TimedAnimation):
     Nofity about new data
     thread safe to be called form worker
     '''
-    self.my_queue.put("<new_data>")
+    #self.my_queue.put("<new_data>")
 
   def _setup(self):
     # clear figure
@@ -58,7 +60,9 @@ class ASDLPlotter(animation.TimedAnimation):
       plt.ylim(self.plotData[idx].data_range)
       # Iterate over data vector
       for jdx in xrange(len(self.plotData[idx].data)):
-        self.lines[idx].insert(jdx, plt.plot(self.plotData[idx].data[jdx], label='%d'%jdx))
+        # set vector label to vecLabels if available
+        lbl = '%d' % jdx if (self.plotData[idx].vecLabels == None) else self.plotData[idx].vecLabels[jdx]
+        self.lines[idx].insert(jdx, plt.plot(self.plotData[idx].data[jdx], label=lbl))
       # place legend right of subplot by decreasing plot width to 90%
       box = spl.get_position()
       spl.set_position([box.x0, box.y0, box.width * 0.9, box.height])
@@ -80,17 +84,22 @@ class ASDLPlotter(animation.TimedAnimation):
         # handle 'events'
         if (element == "<setup>"):
           self._setup()
-        elif (element == "<new_data>"):
+          return iter(str())
+        #elif (element == "<new_data>"):
           # return iterator with single element
-          return iter(range(1,2))
-        else:
-          print element
-
-      # return empty iterator so that _draw_frame() will not be executed
-      return iter(str())
+          #return iter(range(1,2))
+        #else:
+          # return empty iterator so that _draw_frame() will not be executed
+      return iter(range(1,2))
 
   def _draw_frame(self, framedata):
-    for idx in xrange(len(self.plotData)):
-      for jdx in xrange(len(self.plotData[idx].data)):
-        self.lines[idx][jdx][0].set_ydata(self.plotData[idx].data[jdx])
+    try:
+      for idx in xrange(len(self.plotData)):
+        for jdx in xrange(len(self.plotData[idx].data)):
+          self.lines[idx][jdx][0].set_ydata(self.plotData[idx].data[jdx])
+    except IndexError:
+      # migh happen due to initialization...
+      # TODO: improve handling?
+      logging.debug("IndexError")
+      pass
 

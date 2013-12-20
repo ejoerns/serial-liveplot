@@ -8,7 +8,14 @@ class ChannelPlotData:
   def __init__(self, vec_size, maxLen, label="Unknown", unit="[]", divisor=1, data_range=(-2000, 2000)):
     self.maxLen = maxLen
     self.plotUnit = unit
-    self.plotLabel = label
+    # do some string magic to extract channel and vector labels
+    vec_lbls = None
+    tmp = label.rsplit("[")
+    ch_lbl = tmp[0].rstrip()
+    if (len(tmp) > 1): vec_lbls = tmp[1].rstrip(']').split(':')
+    # assign
+    self.plotLabel = ch_lbl
+    self.vecLabels = vec_lbls
     self.divisor = divisor
     self.data_range = data_range
     # 
