@@ -1,3 +1,13 @@
+################################################################################
+#
+# AVR serial data logger (ASDL)
+#
+# To be used with the avr-logger library
+#
+# (c) 2013 by Enrico Joerns
+#
+################################################################################
+
 import logging
 
 import gtk, gobject
