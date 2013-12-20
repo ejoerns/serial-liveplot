@@ -2,7 +2,7 @@
 
 /*----------------------------------------------------------------------------*/
 void
-asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divisor, char* name, char* unit) {
+asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divisor, int32_t range_l, int32_t range_h, char* name, char* unit) {
   uint8_t t_size = 0;
   switch(type & 0x07) {
     case ASDL_INT8:
@@ -36,10 +36,18 @@ asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divis
   logger->send(ASDL_IDENTIFIER);
   logger->send(ASDL_CMD_ADD | nr);
   logger->send(type);
-  logger->send((divisor >> 24) & 0xFF);
-  logger->send((divisor >> 16) & 0xFF);
-  logger->send((divisor >> 8) & 0xFF);
-  logger->send((divisor >> 0) & 0xFF);
+  logger->send((divisor >> 24) & 0xFFUL);
+  logger->send((divisor >> 16) & 0xFFUL);
+  logger->send((divisor >> 8) & 0xFFUL);
+  logger->send((divisor >> 0) & 0xFFUL);
+  logger->send((range_l >> 24) & 0xFFUL);
+  logger->send((range_l >> 16) & 0xFFUL);
+  logger->send((range_l >> 8) & 0xFFUL);
+  logger->send((range_l >> 0) & 0xFFUL);
+  logger->send((range_h >> 24) & 0xFFUL);
+  logger->send((range_h >> 16) & 0xFFUL);
+  logger->send((range_h >> 8) & 0xFFUL);
+  logger->send((range_h >> 0) & 0xFFUL);
   while (*name) {
     logger->send(*name++);
   }

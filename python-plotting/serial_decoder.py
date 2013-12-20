@@ -87,6 +87,8 @@ class ASDLChannelDecoder:
     self.vec_size = 0
     # data divisor to match 'unit'
     self.__divisor = 0
+    self.__range_l = ""
+    self.__range_h = ""
     # string name of channel
     self.name = ""
     # string unit of channel
@@ -116,6 +118,12 @@ class ASDLChannelDecoder:
     self.__divisor = self.__divisor << 8
     self.__divisor = self.__divisor | inbyte
 
+  def pushRangeLByte(self, inbyte):
+    self.__range_l += chr(inbyte)
+
+  def pushRangeHByte(self, inbyte):
+    self.__range_h += chr(inbyte)
+
   def setName(self, name):
     self.name = name
 
@@ -123,7 +131,15 @@ class ASDLChannelDecoder:
     self.unit = unit
 
   def getPlotDataInstance(self):
-    return ChannelPlotData(self.vec_size, 100, label=self.name, unit=self.unit, divisor=self.__divisor)
+    range_l, = struct.unpack('>l', self.__range_l)
+    range_h, = struct.unpack('>l', self.__range_h)
+    return ChannelPlotData(
+        self.vec_size, 
+        100, 
+        label=self.name, 
+        unit=self.unit, 
+        divisor=self.__divisor, 
+        data_range=(range_l, range_h))
 
 
   def pushDataByte(self, byte):
@@ -232,6 +248,15 @@ class ASDLDecoder:
         # read divisor
         elif self.__parse_pos < 7:
           self.curr_ch_decoder.pushDivisorByte(inbyte)
+          self.counter = 0
+          self.__parse_pos += 1
+        # read divisor
+        elif self.__parse_pos < 11:
+          self.curr_ch_decoder.pushRangeLByte(inbyte)
+          self.counter = 0
+          self.__parse_pos += 1
+        elif self.__parse_pos < 15:
+          self.curr_ch_decoder.pushRangeHByte(inbyte)
           self.counter = 0
           self.__parse_pos += 1
         # read strings

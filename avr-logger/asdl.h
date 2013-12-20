@@ -90,10 +90,12 @@ struct asdl_channel {
  * @param nr
  * @param type
  * @param divisor
+ * @param range_l
+ * @param range_h
  * @param name
  * @param unit
  */
-void asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divisor, char* name, char* unit);
+void asdl_add_ch(struct asdl_logger* logger, uint8_t nr, uint8_t type, uint32_t divisor, int32_t range_l, int32_t range_h, char* name, char* unit);
 
 /**
  * Tells the logger to start.
