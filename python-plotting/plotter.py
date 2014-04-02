@@ -49,6 +49,7 @@ def main():
 
   plotter = ASDLPlotter(ch_data)
   ser_dec.onStartHandler.append(plotter.setup)
+  ser_dec.onDataUpdateHandler.append(plotter.new_data)
 
   # Start receiver worker Thread
   ser_recv.start()

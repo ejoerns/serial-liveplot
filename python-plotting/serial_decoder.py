@@ -177,7 +177,9 @@ class ASDLDecoder:
     self.name = ""
     self.counter = 0
     # hold channel and command for current received bytes
+    self._start_time = 0
     self.curr_command = 0
+    # index of current channel [0..15]
     self.curr_channel = 0
     curr_ch_decoder = 0
     self.plotData = ch_data
@@ -186,6 +188,9 @@ class ASDLDecoder:
     # Handler functions
     self.onChannelAddHandler = []
     self.onStartHandler = []
+    ''' invoked if new data available, provides tuple:
+        (time [ms], channel [index], channel data [tuple])
+    '''
     self.onDataUpdateHandler = []
 
     #logging.basicConfig(level=logging.DEBUG)
@@ -235,10 +240,14 @@ class ASDLDecoder:
         # check if all data received
         if self.__parse_pos == self.stop_pos:
           if inbyte == ASDL_END_TOKEN:
-            # add new data to channels queue
+            # get timestamp, get data, notify receivers
+            tstamp = int(time.time() * 1000) - self._start_time
+            #print "received data at ", tstamp            # add new data to channels queue
             newData = self.channel_decoders[self.curr_channel].decodeDataStream()
-            self.plotData[self.curr_channel].add(newData)
-            # TODO: call plotter?
+            #self.plotData[self.curr_channel].add(newData)
+            for handler in self.onDataUpdateHandler:
+              handler( (tstamp, self.curr_channel, newData) )
+
           else:
             logging.error("Expected end token, got 0x%02X", inbyte)
           self.__parse_pos = 0
@@ -304,6 +313,7 @@ class ASDLDecoder:
       # Start data capturing
       elif self.curr_command == ASDL_CMD_GO:
         if inbyte == ASDL_END_TOKEN:
+          self._start_time = int(time.time() * 1000) 
           logging.info("Start capturing...")
           # get instance from each decoder 
           del self.plotData[:]
