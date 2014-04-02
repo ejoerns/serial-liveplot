@@ -34,11 +34,12 @@ class SerialReceiver(threading.Thread):
         self._target = self.read
         self._args = args
         self.__lock = threading.Lock()
-        self.ser = serial.Serial(device, port)
+        self._serial = serial.Serial(device, port, timeout=0.001) # wait max 1ms for new data
         self.data_buffer = ""
         self.closing = False # A flag to indicate thread shutdown
-        self.sleeptime = 0.00005
+        #self.sleeptime = 0.00005
         threading.Thread.__init__(self)
+        # List of handlers to notify about new data
         self.handler = []
 
     def run(self):
@@ -46,16 +47,18 @@ class SerialReceiver(threading.Thread):
 
     def read(self):
         while not self.closing:
-            time.sleep(self.sleeptime)
+            #time.sleep(self.sleeptime)
             if not self.__lock.acquire(False):
                 continue
             try:
-                inbyte = ord(self.ser.read(1))
-                for h in self.handler:
-                  h.handle(inbyte)
+                inbytes = self._serial.read(20)
+                # Notify receivers for each byte received
+                for inbyte in inbytes:
+                  for h in self.handler:
+                    h.handle(ord(inbyte))
             finally:
                 self.__lock.release()
-        self.ser.close()
+        self._serial.close()
 
     def pop_buffer(self):
         # If a request is pending, we don't access the buffer
@@ -67,7 +70,7 @@ class SerialReceiver(threading.Thread):
         return buf
 
     def write(data):
-        self.ser.write(data)
+        self._serial.write(data)
 
     def close(self):
         self.closing = True
