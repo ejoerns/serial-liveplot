@@ -20,6 +20,7 @@ from serial_decoder import SerialReceiver
 from serial_decoder import ASDLDecoder
 from plot_data import ChannelPlotData
 from plotgui import ASDLPlotter
+from file_logger import ASDLFileLogger
 
 
 # main() function
@@ -33,6 +34,9 @@ def main():
       help='Baudrate of device. Default: 38400')
   parser.add_argument('-s, --samples', dest='samples', type=int, default=100,
       help='Number of displayed samples. Default: 100')
+  parser.add_argument('-f, --file', dest='logfile', default=None,
+      help='File to log data')
+  parser.add_argument('--nogui', help='Deactivates graphical output', action="store_true")
   
   args = parser.parse_args()
 
@@ -47,15 +51,25 @@ def main():
   # register handler
   ser_recv.handler.append(ser_dec)
 
-  plotter = ASDLPlotter(ch_data)
-  ser_dec.onStartHandler.append(plotter.setup)
-  ser_dec.onDataUpdateHandler.append(plotter.new_data)
+  # setup gui (if not disabled)
+  if not args.nogui:
+    plotter = ASDLPlotter()
+    ser_dec.onStartHandler.append(plotter.setup)
+    ser_dec.onDataUpdateHandler.append(plotter.new_data)
+
+  if args.logfile != None:
+    print "Logging to file..."
+    file_logger = ASDLFileLogger(args.logfile)
+    ser_dec.onStartHandler.append(file_logger.setup)
+    ser_dec.onDataUpdateHandler.append(file_logger.new_data)
+
 
   # Start receiver worker Thread
   ser_recv.start()
 
-  # Start gui on main Thread
-  plotter.show()
+  if not args.nogui:
+    # Start gui on main Thread
+    plotter.show()
 
   ser_recv.close()
   print "Done!"
