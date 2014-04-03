@@ -35,9 +35,15 @@ class ASDLPlotter(animation.TimedAnimation):
   Plots data provided by a list of ChannelPlotData.
   '''
 
-  DATA_INTERVAL = 1     # [ms]
-  DISPLAY_RANGE = 1000  # [ms]
+  # This is the time interval between two data points in the plot data
+  DATA_INTERVAL = 10     # [ms]
+  # This is the total time interval for which the data is stored
+  DISPLAY_RANGE = 10000  # [ms]
+  # This is the (minimum) interval for updating the plot visualization
   DRAW_INTERVAL = 50    # [ms]
+
+  # This is the number of elements to store for maintaining the data information as described above
+  DATA_SIZE = int(DISPLAY_RANGE / DATA_INTERVAL)
 
   # constr
   def __init__(self, plotData):
@@ -54,6 +60,8 @@ class ASDLPlotter(animation.TimedAnimation):
     # Time since start of plot [ms]
     self.startTime = 0
     self.plotTime = None
+    # Holds last element read from event queue, must be stored over subsequent calls of _draw_frame()
+    self.last_element = None
     #self.lastData = [() for x in xrange(len(plotData))] # Array of tuples
     #print "plotData is size: ", len(plotData)
     animation.TimedAnimation.__init__(self, self.fig, interval=self.DRAW_INTERVAL, blit=True)
@@ -65,7 +73,7 @@ class ASDLPlotter(animation.TimedAnimation):
     '''
     self.lastData = [() for x in self.channelSetup] # Array of tuples
     # Create Array of channels of subchannel dequeues to hold sensor data
-    self.plotData = [[deque([0.0]*1000) for x in xrange(ch.vec_size)] for ch in self.channelSetup]
+    self.plotData = [[deque([0.0]*self.DATA_SIZE) for x in xrange(ch.vec_size)] for ch in self.channelSetup]
     print ">>> SETUP!"
     self.event_queue.put( ("<setup>", None) )
 
@@ -76,7 +84,7 @@ class ASDLPlotter(animation.TimedAnimation):
     '''
     #print "Adding data from time", plot_tuple[0], "to idx", plot_tuple[1], ":", plot_tuple[2]
     #self.lastData[plot_tuple[1]] = (plot_tuple[0], plot_tuple[2])
-    print ">>> NEW DATA! (channel",plot_tuple[1],")"
+    #print ">>> NEW DATA! (channel",plot_tuple[1],")"
     self.event_queue.put( ("<new_data>", plot_tuple ) )
 
   def _setup(self):
@@ -116,38 +124,6 @@ class ASDLPlotter(animation.TimedAnimation):
   # @Override
   # executed every t ms if no data available
   def new_frame_seq(self):
-      '''
-      #print "new_frame_seq @", int(time.time() * 1000)
-      sequence = ""
-      try:
-        element = self.event_queue.get_nowait()
-      except Queue.Empty:
-        element = None
-        #return iter(sequence);
-
-      # handle 'events'
-      if (element == "<setup>"):
-        self._setup()
-        return iter(str())
-
-      if (self.plotData == None):
-        print "Not set up yet"
-        return iter("")
-
-      num_elements = self.DRAW_INTERVAL / self.DATA_INTERVAL
-
-      # We generate a sequence of 'num_elements' new samples
-      for f in xrange(num_elements):
-        print "<<< Time:", int(time.time() * 1000)
-        # shift each channel dequeue by one
-        for channel in xrange(len(self.plotData)):
-          for subchannel in xrange(len(self.plotData[channel])):
-            x = self.plotData[channel][subchannel].pop()
-            self.plotData[channel][subchannel].appendleft(self.lastData[channel][1][subchannel])
-
-      #if (element == "<new_data>"):
-      sequence += "x"
-      '''
       return iter("x");
 
   # executed if new_frame_seq generated sequence
@@ -172,30 +148,27 @@ class ASDLPlotter(animation.TimedAnimation):
     # get elements to add
     num_elements = plot_interval / self.DATA_INTERVAL
 
-    print "--- Will accept times up to ", (now_time + plot_interval)
-    print "--- Will add", num_elements, "elements"
-
-    # @TODO: move to init?
-    self.last_element = None
+    #print "--- Will accept times up to ", (now_time + plot_interval)
+    #print "--- Will add", num_elements, "elements"
 
     # We generate a sequence of 'num_elements' new samples
-    #for frame_nr in xrange(num_elements):
     frame_nr = 0;
     while frame_nr < num_elements:
 
-      # get new item from queue if we do not have one
+      # get new item from queue if we do not have one already
       if (self.last_element == None):
         try:
           self.last_element = self.event_queue.get_nowait()
+          #print "Read new data! (",self.event_queue.qsize(),"items left)"
         except Queue.Empty:
           self.last_element = None
 
-      # if we have data, process it, otherwise continue wiht old data
+      # if we have data, process it, otherwise continue with old data
       if (self.last_element != None):
 
         # process setup command
         if self.last_element[0] == "<setup>":
-          print "Setup plot..."
+          logging.info("Setup plot...")
           self.last_element = None
           self._setup()
           return
@@ -203,17 +176,12 @@ class ASDLPlotter(animation.TimedAnimation):
         # process data command
         elif self.last_element[0] == "<new_data>":
           evt_time = self.last_element[1][0]
-          # abort if time newer than our interval
-          print "eval event @", evt_time
-          if (evt_time > now_time + plot_interval):
-              print "Time out of interval"
-              break
           # if event time is smaller than our new item, 
           # update and continue as we might get more events
           if (evt_time < now_time + frame_nr * self.DATA_INTERVAL):
             up_channel = self.last_element[1][1]
             up_data = self.last_element[1][2]
-            print "Update channel", up_channel, "with data", up_data
+            #print "Update channel", up_channel, "with data", up_data
             self.lastData[up_channel] = up_data
             # invalidate to mark as 'used'
             self.last_element = None
@@ -223,24 +191,18 @@ class ASDLPlotter(animation.TimedAnimation):
         else:
           logger.error("Unknown command from queue")
 
-      # If we already have the newest data, write it to our plot data list
-      # shift each channel dequeue by one
-      print "Add to queue.."
+      # Here we have the most recent data stored in self.lastData.
+      # So we can safely update our plot data list by one element,
+      # i.e. delete right and append left a new element (keeps queue size fixed)
+      #print "Add frame",frame_nr,"to queue.."
       for channel in xrange(len(self.plotData)):
         for subchannel in xrange(len(self.plotData[channel])):
           x = self.plotData[channel][subchannel].pop()
           self.plotData[channel][subchannel].appendleft(self.lastData[channel][subchannel])
       frame_nr += 1
 
-    #print "_draw_frame", framedata, "@", int(time.time() * 1000)
-    try:
-      for idx in xrange(len(self.plotData)):
-        for jdx in xrange(len(self.plotData[idx])):
-          self.lines[idx][jdx][0].set_ydata(self.plotData[idx][jdx])
-          #self.lines[idx][jdx][0].set_ydata(self.lastData[idx][jdx])
-    except IndexError:
-      # migh happen due to initialization...
-      # TODO: improve handling?
-      logging.debug("IndexError")
-      pass
+    # once we updated all our plot data, print it to screen
+    for idx in xrange(len(self.plotData)):
+      for jdx in xrange(len(self.plotData[idx])):
+        self.lines[idx][jdx][0].set_ydata(self.plotData[idx][jdx])
 
