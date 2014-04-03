@@ -4,7 +4,7 @@
 #
 # To be used with the avr-logger library
 #
-# (c) 2013 by Enrico Joerns
+# (c) 2013-2014 by Enrico Joerns
 #
 ################################################################################
 
@@ -16,6 +16,8 @@ import matplotlib
 # Note: GTK requries special thread handling,
 # see http://unpythonic.blogspot.de/2007/08/using-threads-in-pygtk.html
 #matplotlib.use('GTkAgg')
+matplotlib.use('TkAgg')
+#matplotlib.use('Qt4Agg')
 
 import multiprocessing as mp
 import numpy as np
@@ -46,11 +48,7 @@ class ASDLPlotter(animation.TimedAnimation):
   DATA_SIZE = int(DISPLAY_RANGE / DATA_INTERVAL)
 
   # constr
-  def __init__(self, plotData):
-    ''' 
-    plotData: is expected to be a list of ChannelPlotData
-    '''
-    self.channelSetup = plotData
+  def __init__(self):
     self.event_queue = mp.Queue()
     self.fig = plt.figure()
     self.win = self.fig.canvas.manager.window
@@ -62,19 +60,22 @@ class ASDLPlotter(animation.TimedAnimation):
     self.plotTime = None
     # Holds last element read from event queue, must be stored over subsequent calls of _draw_frame()
     self.last_element = None
-    #self.lastData = [() for x in xrange(len(plotData))] # Array of tuples
-    #print "plotData is size: ", len(plotData)
     animation.TimedAnimation.__init__(self, self.fig, interval=self.DRAW_INTERVAL, blit=True)
+    #self.fig.canvas.mpl_connect('key_press_event', self.onClick)
 
-  def setup(self, dummyPlotData):
+  #def onClick(self, event):
+  #  print 'button=%s, x=%d, y=%d'%(
+  #      event.key, event.x, event.y)
+
+  def setup(self, plotData):
     '''
     Notify about channel set up complete.
     thread safe to be called from worker
     '''
+    self.channelSetup = plotData
     self.lastData = [() for x in self.channelSetup] # Array of tuples
     # Create Array of channels of subchannel dequeues to hold sensor data
     self.plotData = [[deque([0.0]*self.DATA_SIZE) for x in xrange(ch.vec_size)] for ch in self.channelSetup]
-    print ">>> SETUP!"
     self.event_queue.put( ("<setup>", None) )
 
   def new_data(self, plot_tuple):
@@ -82,9 +83,6 @@ class ASDLPlotter(animation.TimedAnimation):
     Nofity about new data
     thread safe to be called form worker
     '''
-    #print "Adding data from time", plot_tuple[0], "to idx", plot_tuple[1], ":", plot_tuple[2]
-    #self.lastData[plot_tuple[1]] = (plot_tuple[0], plot_tuple[2])
-    #print ">>> NEW DATA! (channel",plot_tuple[1],")"
     self.event_queue.put( ("<new_data>", plot_tuple ) )
 
   def _setup(self):
@@ -109,7 +107,6 @@ class ASDLPlotter(animation.TimedAnimation):
       spl.set_position([box.x0, box.y0, box.width * 0.9, box.height])
       plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
       # init deque to save plot y data
-      #self.data = [deque([0.0]*maxLen) for x in xrange(vec_size)]
       self.plotTime = 0
       self.startTime = int(time.time() * 1000)
 

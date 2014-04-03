@@ -4,7 +4,7 @@
 #
 # To be used with the avr-logger library
 #
-# (c) 2013 by Enrico Joerns
+# (c) 2013-2014 by Enrico Joerns
 #
 ################################################################################
 

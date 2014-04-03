@@ -4,7 +4,7 @@
 #
 # To be used with the avr-logger library
 #
-# (c) 2013 by Enrico Joerns
+# (c) 2013-2014 by Enrico Joerns
 #
 ################################################################################
 
@@ -39,8 +39,10 @@ class SerialReceiver(threading.Thread):
         self.closing = False # A flag to indicate thread shutdown
         #self.sleeptime = 0.00005
         threading.Thread.__init__(self)
-        # List of handlers to notify about new data
-        self.handler = []
+        # List of handler functions to notify about new data
+        self.dataHandler = []
+        # List of handler functions to notify about connection close
+        self.closeHandler = []
 
     def run(self):
         self._target(*self._args)
@@ -54,11 +56,13 @@ class SerialReceiver(threading.Thread):
                 inbytes = self._serial.read(20)
                 # Notify receivers for each byte received
                 for inbyte in inbytes:
-                  for h in self.handler:
-                    h.handle(ord(inbyte))
+                  for h in self.dataHandler:
+                    h(ord(inbyte))
             finally:
                 self.__lock.release()
         self._serial.close()
+        for chandler in self.closeHandler:
+          chandler()
 
     def pop_buffer(self):
         # If a request is pending, we don't access the buffer
@@ -189,12 +193,19 @@ class ASDLDecoder:
     self.analogPlot = None
     self.channel_decoders = [] # Holds decoder class for each channel
     # Handler functions
+    '''
+    '''
     self.onChannelAddHandler = []
+    ''' invoked if data receive started (channel setup finished)
+    '''
     self.onStartHandler = []
     ''' invoked if new data available, provides tuple:
         (time [ms], channel [index], channel data [tuple])
     '''
     self.onDataUpdateHandler = []
+    '''
+    '''
+    self.onStopHandler = []
 
     #logging.basicConfig(level=logging.DEBUG)
 
@@ -328,4 +339,9 @@ class ASDLDecoder:
         else:
           logging.error("Invalid go command")
         self.__parse_pos = 0
+
+  def stop(self):
+    # Notify stop handler
+    for chandler in self.onStopHandler:
+      chandler()
 

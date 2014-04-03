@@ -18,16 +18,10 @@ class ASDLFileLogger():
   def __init__(self, filename):
     self.event_queue = mp.Queue()
     self.lastData = []
+    self.filename = filename
 
     if os.path.isfile(filename):
       logging.warning("File already exists, will be overwritten :)")
-
-    try:
-      # This will create a new file or **overwrite an existing file**.
-      self.file = open(filename, "w")
-    except IOError:
-      pass
-    pass
 
 
   def setup(self, plotData):
@@ -38,11 +32,14 @@ class ASDLFileLogger():
     # Start worker thread
     self.workerthread = threading.Thread(target=self._worker)
     self.workerthread.start()
-    pass
 
 
   def new_data(self, plot_tuple):
     self._addToQueue(plot_tuple)
+
+
+  def close(self):
+    self._addToQueue(None)
 
 
   def _addToQueue(self, item):
@@ -52,6 +49,14 @@ class ASDLFileLogger():
   def _worker(self):
     close = False
 
+    try:
+      # This will create a new file or **overwrite an existing file**.
+      logfile = open(self.filename, "w")
+      logging.warning("Opened file '%s' for writing log data" % self.filename)
+    except IOError:
+      logging.warning("Failed opening file '%s'. Aborting..." % self.filename)
+      return
+
     # process all our items
     while not close:
       item = self.event_queue.get() # get item (tstamp, channel, data tuple)
@@ -59,6 +64,7 @@ class ASDLFileLogger():
       # can be aborted by sending a None item
       if item == None:
         close = True
+        continue
 
       up_time = item[0]
       up_channel = item[1]
@@ -74,5 +80,9 @@ class ASDLFileLogger():
           line += str(subchannel)
       line += "\n"
       # Write line to file
-      self.file.write(line)
+      logfile.write(line)
+
+    # close file
+    logfile.close()
+    logging.warning("Closed log file")
 

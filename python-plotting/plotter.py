@@ -6,7 +6,7 @@
 #
 # To be used with the avr-logger library
 #
-# (c) 2013 by Enrico Joerns
+# (c) 2013-2014 by Enrico Joerns
 #
 ################################################################################
 
@@ -48,8 +48,9 @@ def main():
   ser_recv = SerialReceiver(args.port, args.baudrate)
   ser_dec = ASDLDecoder(ch_data, samples=args.samples)
   
-  # register handler
-  ser_recv.handler.append(ser_dec)
+  # register data handler
+  ser_recv.dataHandler.append(ser_dec.handle)
+  ser_recv.closeHandler.append(ser_dec.stop)
 
   # setup gui (if not disabled)
   if not args.nogui:
@@ -62,6 +63,7 @@ def main():
     file_logger = ASDLFileLogger(args.logfile)
     ser_dec.onStartHandler.append(file_logger.setup)
     ser_dec.onDataUpdateHandler.append(file_logger.new_data)
+    ser_dec.onStopHandler.append(file_logger.close)
 
 
   # Start receiver worker Thread
@@ -69,7 +71,11 @@ def main():
 
   if not args.nogui:
     # Start gui on main Thread
-    plotter.show()
+    #plotter.show()
+    try:
+      plotter.show()
+    except KeyboardInterrupt:
+      print "********** ERROR **********"
 
   ser_recv.close()
   print "Done!"
