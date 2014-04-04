@@ -50,8 +50,8 @@ class ASDLPlotter(animation.TimedAnimation):
   # constr
   def __init__(self):
     self.event_queue = mp.Queue()
-    self.fig = plt.figure()
-    self.win = self.fig.canvas.manager.window
+    self.figure = plt.figure()
+    self.win = self.figure.canvas.manager.window
     self.lines = []
     self.plotData = None
     self.lastData = []
@@ -60,7 +60,7 @@ class ASDLPlotter(animation.TimedAnimation):
     self.plotTime = None
     # Holds last element read from event queue, must be stored over subsequent calls of _draw_frame()
     self.last_element = None
-    animation.TimedAnimation.__init__(self, self.fig, interval=self.DRAW_INTERVAL, blit=True)
+    animation.TimedAnimation.__init__(self, self.figure, interval=self.DRAW_INTERVAL, blit=True)
     #self.fig.canvas.mpl_connect('key_press_event', self.onClick)
 
   #def onClick(self, event):
@@ -87,25 +87,27 @@ class ASDLPlotter(animation.TimedAnimation):
 
   def _setup(self):
     # clear figure
-    plt.clf()
+    self.figure.clear()
     # rebuild figure
     for channel in xrange(len(self.channelSetup)):
       self.lines.insert(channel, [])
-      spl = self.fig.add_subplot(len(self.channelSetup), 1, channel+1)
-      ax = plt.gca() # get Axes instance as it does not force redraw for each call
-      plt.title(self.channelSetup[channel].plotLabel)
-      plt.xlabel('samples')
-      plt.ylabel(self.channelSetup[channel].plotUnit)
-      plt.ylim(self.channelSetup[channel].data_range)
-      # Iterate over data vector
+      # add as subplot
+      ch_axes = self.figure.add_subplot(len(self.channelSetup), 1, channel + 1)
+      # setup axes
+      ch_axes.set_title(self.channelSetup[channel].plotLabel)
+      ch_axes.set_xlabel('samples')
+      ch_axes.set_ylabel(self.channelSetup[channel].plotUnit)
+      ch_axes.set_ylim(self.channelSetup[channel].data_range)
+      # Iterate over data vector to add data lines
       for subchannel in xrange(len(self.channelSetup[channel].data)):
-        # set vector label to vecLabels if available
+        # set subchannel label to subchannel index or vecLabels if available
         lbl = '%d' % subchannel if (self.channelSetup[channel].vecLabels == None) else self.channelSetup[channel].vecLabels[subchannel]
-        self.lines[channel].insert(subchannel, plt.plot(self.plotData[channel][subchannel], label=lbl))
+        # Add lines for this plot to lines array
+        self.lines[channel].insert(subchannel, ch_axes.plot(self.plotData[channel][subchannel], label=lbl)[0])
       # place legend right of subplot by decreasing plot width to 90%
-      box = spl.get_position()
-      spl.set_position([box.x0, box.y0, box.width * 0.9, box.height])
-      plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+      box = ch_axes.get_position()
+      ch_axes.set_position([box.x0, box.y0, box.width * 0.9, box.height])
+      ch_axes.legend(loc='center left', bbox_to_anchor=(1, 0.5))
       # init deque to save plot y data
       self.plotTime = 0
       self.startTime = int(time.time() * 1000)
@@ -201,5 +203,5 @@ class ASDLPlotter(animation.TimedAnimation):
     # once we updated all our plot data, print it to screen
     for idx in xrange(len(self.plotData)):
       for jdx in xrange(len(self.plotData[idx])):
-        self.lines[idx][jdx][0].set_ydata(self.plotData[idx][jdx])
+        self.lines[idx][jdx].set_ydata(self.plotData[idx][jdx])
 
