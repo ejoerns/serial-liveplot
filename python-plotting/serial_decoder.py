@@ -163,11 +163,13 @@ class ASDLChannelDecoder:
     self.data += chr(byte)
 
   def decodeDataStream(self):
+    ''' '''
     logging.debug("raw data: " + binascii.hexlify(self.data))
-    retval = struct.unpack(self._decodeString, self.data)
-    #print "decoded: ", retval
+    unpacked_tuple = struct.unpack(self._decodeString, self.data)
+    # divide by divisor to get real value
+    retvals = tuple(x / float(self.__divisor) for x in unpacked_tuple)
     self.data = ""
-    return retval
+    return retvals
 
 
 class ASDLDecoder:

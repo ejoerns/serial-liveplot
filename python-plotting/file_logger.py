@@ -19,6 +19,7 @@ class ASDLFileLogger():
     self.event_queue = mp.Queue()
     self.lastData = []
     self.filename = filename
+    self.channelInfo = None
 
     if os.path.isfile(filename):
       logging.warning("File already exists, will be overwritten :)")
@@ -28,6 +29,7 @@ class ASDLFileLogger():
     '''
     plotData: expected to be an array of plot channel information
     '''
+    self.channelInfo = plotData
     self.lastData = [(0,)*channel.vec_size for channel in plotData] # Array of tuples
     # Start worker thread
     self.workerthread = threading.Thread(target=self._worker)
@@ -35,6 +37,10 @@ class ASDLFileLogger():
 
 
   def new_data(self, plot_tuple):
+    '''
+    Add new data to log
+    plot_tuple: tuple of values for one channel
+    '''
     self._addToQueue(plot_tuple)
 
 
@@ -49,6 +55,7 @@ class ASDLFileLogger():
   def _worker(self):
     close = False
 
+    # Open log file
     try:
       # This will create a new file or **overwrite an existing file**.
       logfile = open(self.filename, "w")
@@ -56,6 +63,17 @@ class ASDLFileLogger():
     except IOError:
       logging.warning("Failed opening file '%s'. Aborting..." % self.filename)
       return
+
+    # Write log file header
+    line = "# time"
+    for channel in self.channelInfo:
+      for label in channel.vecLabels:
+        line += ", "
+        line += channel.get_label()
+        line += "."
+        line += label
+    line += "\n"
+    logfile.write(line)
 
     # process all our items
     while not close:

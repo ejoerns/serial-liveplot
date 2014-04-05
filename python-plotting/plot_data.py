@@ -41,13 +41,28 @@ class ChannelPlotData:
     if (len(tmp) > 1): vec_lbls = tmp[1].rstrip(']').split(':')
     # assign
     self.plotLabel = ch_lbl
-    self.vecLabels = vec_lbls
+    if vec_lbls:
+      self.vecLabels = tuple(vec_lbls)
+    else:
+      self.vecLabels = tuple(str(x) for x in xrange(vec_size))
     self.divisor = divisor
     self.data_range = data_range
     # 
     self.vec_size = vec_size # really required?
     self.data = [deque([0.0]*maxLen) for x in xrange(vec_size)]
     print "init with vec_size %d" % (vec_size)
+
+  def num_subchannels(self):
+    ''' returns number of subchannels for this channel '''
+    return self.vec_lbls
+
+  def get_label(self):
+    ''' returns label for this channel'''
+    return self.plotLabel
+
+  def get_sublabels(self):
+    ''' returns tuple of labels for subchannels '''
+    return self.vec_lbls
 
   # ring buffer
   def _addToBuf(self, buf, val):

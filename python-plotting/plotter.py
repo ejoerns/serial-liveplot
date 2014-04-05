@@ -75,7 +75,7 @@ def main():
     try:
       plotter.show()
     except KeyboardInterrupt:
-      print "********** ERROR **********"
+      print "Aborted by KeyboardInterrupt"
 
   ser_recv.close()
   print "Done!"
