@@ -15,21 +15,31 @@ import numpy as np
 from time import sleep
 import logging
 import argparse
+import socket
 
-from serial_decoder import SerialReceiver
+from serial_reader import SerialReceiver
+from socket_reader import SocketReceiver
 from serial_decoder import ASDLDecoder
 from plot_data import ChannelPlotData
 from plotgui import ASDLPlotter
 from file_logger import ASDLFileLogger
 
+def hostname_resolves(hostname):
+    try:
+        socket.gethostbyname(hostname)
+        return True
+    except socket.error:
+        return False
 
 # main() function
 def main():
 
   parser = argparse.ArgumentParser(description="AVR serial data logger")
-  
-  parser.add_argument('port', default='/dev/ttyUSB0',
-      help='Serial port the device is connected to. Default: /dev/ttyUSB0')
+  parser.add_argument('host', default='/dev/ttyUSB0',
+      help='Serial port or host the device is connected to. Default: /dev/ttyUSB0')
+  parser.add_argument('port', nargs='?', default='60001',
+      help='Port to connect to. Default: 60001')
+
   parser.add_argument('-b, --braudrate', dest='baudrate', type=int, default=38400,
       help='Baudrate of device. Default: 38400')
   parser.add_argument('-s, --samples', dest='samples', type=int, default=100,
@@ -45,12 +55,19 @@ def main():
   # shared plot data list
   ch_data = []
 
-  ser_recv = SerialReceiver(args.port, args.baudrate)
+  # determine if we use socket or serial backend
+  if hostname_resolves(args.host):
+    print "Connect to", args.host, "port", args.port
+    receiver = SocketReceiver(host=args.host, port=args.port)
+  else:
+    print "Connect to", args.host
+    receiver = SerialReceiver(port=args.host, baudrate=args.baudrate)
+
   ser_dec = ASDLDecoder(ch_data, samples=args.samples)
   
   # register data handler
-  ser_recv.dataHandler.append(ser_dec.handle)
-  ser_recv.closeHandler.append(ser_dec.stop)
+  receiver.dataHandler.append(ser_dec.handle)
+  receiver.closeHandler.append(ser_dec.stop)
 
   # setup gui (if not disabled)
   if not args.nogui:
@@ -67,7 +84,7 @@ def main():
 
 
   # Start receiver worker Thread
-  ser_recv.start()
+  receiver.start()
 
   if not args.nogui:
     # Start gui on main Thread
@@ -77,7 +94,7 @@ def main():
     except KeyboardInterrupt:
       print "Aborted by KeyboardInterrupt"
 
-  ser_recv.close()
+  receiver.close()
   print "Done!"
 
 # call main
