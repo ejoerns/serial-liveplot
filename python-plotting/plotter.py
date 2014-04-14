@@ -17,6 +17,7 @@ import logging
 import argparse
 import socket
 
+from base_reader import ReaderError
 from serial_reader import SerialReceiver
 from socket_reader import SocketReceiver
 from serial_decoder import ASDLDecoder
@@ -37,7 +38,7 @@ def main():
   parser = argparse.ArgumentParser(description="AVR serial data logger")
   parser.add_argument('host', default='/dev/ttyUSB0',
       help='Serial port or host the device is connected to. Default: /dev/ttyUSB0')
-  parser.add_argument('port', nargs='?', default='60001',
+  parser.add_argument('port', nargs='?', type=int, default='60001',
       help='Port to connect to. Default: 60001')
 
   parser.add_argument('-b, --braudrate', dest='baudrate', type=int, default=38400,
@@ -56,12 +57,16 @@ def main():
   ch_data = []
 
   # determine if we use socket or serial backend
-  if hostname_resolves(args.host):
-    print "Connect to", args.host, "port", args.port
-    receiver = SocketReceiver(host=args.host, port=args.port)
-  else:
-    print "Connect to", args.host
-    receiver = SerialReceiver(port=args.host, baudrate=args.baudrate)
+  try:
+    if hostname_resolves(args.host):
+      print "Connect to", args.host, "port", args.port
+      receiver = SocketReceiver(host=args.host, port=args.port)
+    else:
+      print "Connect to", args.host
+      receiver = SerialReceiver(port=args.host, baudrate=args.baudrate)
+  except ReaderError as err:
+    print err
+    return
 
   ser_dec = ASDLDecoder(ch_data, samples=args.samples)
   

@@ -11,6 +11,7 @@
 import logging
 import binascii
 import struct
+import time
 
 from plot_data import *
 from plotgui import *
@@ -21,10 +22,6 @@ ASDL_END_TOKEN = 0x69
 ASDL_CMD_DATA = 0x00
 ASDL_CMD_ADD = 0x10
 ASDL_CMD_GO = 0x20
-
-import serial
-import threading
-import time
 
 
 class ASDLChannelDecoder:

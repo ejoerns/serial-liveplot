@@ -1,7 +1,7 @@
 import threading
 
 class BaseReader(threading.Thread):
-    """ This class has been written by
+    """ This class is based on work by
         Philipp Klaus and can be found on
         https://gist.github.com/4039175 .  """
     def __init__(self, **kwargs):
@@ -48,21 +48,22 @@ class BaseReader(threading.Thread):
       Parameters are passed as kwargs and depend on implementation
       @note: to implement by concrete class 
       '''
-      pass
+      raise ReaderError("No implementation")
 
     def _device_read(self, args):
       ''' 
       Read from device.
       @note: to implement by concrete class 
       '''
-      pass
+      raise ReaderError("No implementation")
+
 
     def _device_close(self, args):
       ''' 
       Close device.
       @note: to implement by concrete class 
       '''
-      pass
+      raise ReaderError("No implementation")
 
     def pop_buffer(self):
         # If a request is pending, we don't access the buffer
@@ -80,3 +81,8 @@ class BaseReader(threading.Thread):
         self.closing = True
 
 
+class ReaderError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)

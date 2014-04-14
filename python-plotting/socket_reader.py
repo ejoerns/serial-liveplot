@@ -1,6 +1,7 @@
 import socket
 
 from base_reader import BaseReader
+from base_reader import ReaderError
 
 class SocketReceiver(BaseReader):
   
@@ -10,9 +11,10 @@ class SocketReceiver(BaseReader):
         Arguments: host=hostname, port=portnumber
         '''
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
-        print socket.gethostname()
-        self._socket.connect((kwargs['host'], kwargs['port']))
-        pass
+        try:
+            self._socket.connect((kwargs['host'], kwargs['port']))
+        except socket.error as err:
+            raise ReaderError(err)
 
     def _device_read(self):
         ''' 
