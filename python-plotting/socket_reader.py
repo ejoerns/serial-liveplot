@@ -1,4 +1,5 @@
 import socket
+import logging
 
 from base_reader import BaseReader
 from base_reader import ReaderError
@@ -27,4 +28,5 @@ class SocketReceiver(BaseReader):
         Closes connection to socket.
         '''
         self._socket.close()
+        logging.info("Socket closed")
 

@@ -74,14 +74,15 @@ def main():
   receiver.dataHandler.append(ser_dec.handle)
   receiver.closeHandler.append(ser_dec.stop)
 
-  # setup gui (if not disabled)
+  # setup gui and register handlers
   if not args.nogui:
     plotter = ASDLPlotter()
     ser_dec.onStartHandler.append(plotter.setup)
     ser_dec.onDataUpdateHandler.append(plotter.new_data)
+    ser_dec.onStopHandler.append(plotter.close)
 
+  # setup logger and register handlers
   if args.logfile != None:
-    print "Logging to file..."
     file_logger = ASDLFileLogger(args.logfile)
     ser_dec.onStartHandler.append(file_logger.setup)
     ser_dec.onDataUpdateHandler.append(file_logger.new_data)
@@ -93,7 +94,6 @@ def main():
 
   if not args.nogui:
     # Start gui on main Thread
-    #plotter.show()
     try:
       plotter.show()
     except KeyboardInterrupt:

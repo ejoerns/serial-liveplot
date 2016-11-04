@@ -31,6 +31,10 @@ class BaseReader(threading.Thread):
             try:
                 #inbytes = self._serial.read(20)
                 inbytes = self._device_read()
+                # Close if end of stream detected
+                if not inbytes:
+                    self.close()
+                    continue
                 # Notify receivers for each byte received
                 for inbyte in inbytes:
                   for h in self.dataHandler:
@@ -53,6 +57,9 @@ class BaseReader(threading.Thread):
     def _device_read(self, args):
       ''' 
       Read from device.
+      Must block or return > 1,
+      value 0 indicates devices shutdown
+
       @note: to implement by concrete class 
       '''
       raise ReaderError("No implementation")

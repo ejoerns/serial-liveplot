@@ -1,4 +1,5 @@
 import serial
+import logging
 
 from base_reader import BaseReader
 from base_reader import ReaderError
@@ -22,5 +23,5 @@ class SerialReceiver(BaseReader):
         Close device.
         '''
         self._serial.close()
-        pass
+        logging.info("Serial port closed")
 

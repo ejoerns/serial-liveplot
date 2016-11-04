@@ -60,6 +60,7 @@ class ASDLPlotter(animation.TimedAnimation):
     self.plotTime = None
     # Holds last element read from event queue, must be stored over subsequent calls of _draw_frame()
     self.last_element = None
+    self.closed = False
     animation.TimedAnimation.__init__(self, self.figure, interval=self.DRAW_INTERVAL, blit=True)
     #self.fig.canvas.mpl_connect('key_press_event', self.onClick)
 
@@ -128,6 +129,8 @@ class ASDLPlotter(animation.TimedAnimation):
   # executed if new_frame_seq generated sequence
   def _draw_frame(self, framedata):
 
+    if self.closed:
+      return
 
     # Check for <setup> command if not set up yet...
     if self.plotTime == None:
@@ -196,7 +199,7 @@ class ASDLPlotter(animation.TimedAnimation):
       #print "Add frame",frame_nr,"to queue.."
       for channel in xrange(len(self.plotData)):
         for subchannel in xrange(len(self.plotData[channel])):
-          x = self.plotData[channel][subchannel].pop()
+          self.plotData[channel][subchannel].pop()
           self.plotData[channel][subchannel].appendleft(self.lastData[channel][subchannel])
       frame_nr += 1
 
@@ -204,4 +207,7 @@ class ASDLPlotter(animation.TimedAnimation):
     for idx in xrange(len(self.plotData)):
       for jdx in xrange(len(self.plotData[idx])):
         self.lines[idx][jdx].set_ydata(self.plotData[idx][jdx])
+
+  def close(self):
+    self.closed = True
 
